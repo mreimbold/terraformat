@@ -3,13 +3,14 @@ package cli
 import (
 	"bytes"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/spf13/cobra"
 
 	"github.com/mreimbold/terraformat/config"
 	"github.com/mreimbold/terraformat/format"
@@ -21,6 +22,15 @@ const (
 	exitError = 2
 )
 
+type exitCodeError struct {
+	code int
+}
+
+// Error returns the error string.
+func (err exitCodeError) Error() string {
+	return fmt.Sprintf("exit %d", err.code)
+}
+
 type staticError string
 
 // Error returns the error string.
@@ -29,7 +39,6 @@ func (err staticError) Error() string {
 }
 
 const (
-	errParseFlags          staticError = "parse flags"
 	errWriteAndCheck       staticError = "-w and -check are mutually exclusive"
 	errWriteNeedsArguments staticError = "-w requires file or dir arguments"
 	errReadStdin           staticError = "read stdin"
@@ -47,58 +56,103 @@ type runOptions struct {
 	paths []string
 }
 
-// Run executes the terraformat CLI.
-func Run(binName string) int {
-	opts, err := parseFlags(binName, os.Args[1:])
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
-
-		printUsage(binName)
-
-		return exitError
-	}
-
-	err = validateOptions(opts)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
-
-		return exitError
-	}
-
-	cfg := config.Default()
-
-	//nolint:revive // add-constant: len check is clear here.
-	if len(opts.paths) == 0 {
-		return runOnStdin(cfg, opts)
-	}
-
-	return runOnPaths(cfg, opts)
+type ioConfig struct {
+	in  io.Reader
+	out io.Writer
+	err io.Writer
 }
 
-func parseFlags(binName string, args []string) (runOptions, error) {
-	flags := flag.NewFlagSet(binName, flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	write := flags.Bool(
+// Execute runs the terraformat CLI and returns the exit code.
+func Execute() int {
+	cmd := newRootCommand()
+
+	return executeCommand(cmd)
+}
+
+func newRootCommand() *cobra.Command {
+	var (
+		write bool
+		check bool
+	)
+
+	cmd := new(cobra.Command)
+	cmd.Use = "terraformat [flags] [path ...]"
+	cmd.Short = "Format Terraform files beyond terraform fmt"
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		opts := runOptions{
+			write: write,
+			check: check,
+			paths: args,
+		}
+		ioCfg := ioConfig{
+			in:  cmd.InOrStdin(),
+			out: cmd.OutOrStdout(),
+			err: cmd.ErrOrStderr(),
+		}
+
+		code := run(config.Default(), opts, ioCfg)
+		if code == exitOK {
+			return nil
+		}
+
+		return exitCodeError{code: code}
+	}
+
+	cmd.Flags().BoolVarP(
+		&write,
+		"write",
 		"w",
 		false,
 		"write result to (source) file instead of stdout",
 	)
-	check := flags.Bool(
+	cmd.Flags().BoolVar(
+		&check,
 		"check",
 		false,
 		"exit with non-zero status if formatting would change any files",
 	)
+	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+		_ = cmd.Usage()
 
-	err := flags.Parse(args)
-	if err != nil {
-		return emptyRunOptions(), wrapError(errParseFlags, err)
+		return exitCodeError{code: exitError}
+	})
+
+	return cmd
+}
+
+func executeCommand(cmd *cobra.Command) int {
+	err := cmd.Execute()
+	if err == nil {
+		return exitOK
 	}
 
-	return runOptions{
-		write: *write,
-		check: *check,
-		paths: flags.Args(),
-	}, nil
+	var exitErr exitCodeError
+	if errors.As(err, &exitErr) {
+		return exitErr.code
+	}
+
+	_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+
+	return exitError
+}
+
+func run(cfg config.Config, opts runOptions, ioCfg ioConfig) int {
+	err := validateOptions(opts)
+	if err != nil {
+		_, _ = fmt.Fprintln(ioCfg.err, err)
+
+		return exitError
+	}
+
+	//nolint:revive // add-constant: len check is clear here.
+	if len(opts.paths) == 0 {
+		return runOnStdin(cfg, opts, ioCfg)
+	}
+
+	return runOnPaths(cfg, opts, ioCfg)
 }
 
 func validateOptions(opts runOptions) error {
@@ -114,17 +168,17 @@ func validateOptions(opts runOptions) error {
 	return nil
 }
 
-func runOnStdin(cfg config.Config, opts runOptions) int {
-	input, err := io.ReadAll(os.Stdin)
+func runOnStdin(cfg config.Config, opts runOptions, ioCfg ioConfig) int {
+	input, err := io.ReadAll(ioCfg.in)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, wrapError(errReadStdin, err))
+		_, _ = fmt.Fprintln(ioCfg.err, wrapError(errReadStdin, err))
 
 		return exitError
 	}
 
 	output, err := format.Format(input, cfg)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, wrapError(errFormatInput, err))
+		_, _ = fmt.Fprintln(ioCfg.err, wrapError(errFormatInput, err))
 
 		return exitError
 	}
@@ -137,22 +191,22 @@ func runOnStdin(cfg config.Config, opts runOptions) int {
 		return exitOK
 	}
 
-	_, _ = os.Stdout.Write(output)
+	_, _ = ioCfg.out.Write(output)
 
 	return exitOK
 }
 
-func runOnPaths(cfg config.Config, opts runOptions) int {
+func runOnPaths(cfg config.Config, opts runOptions, ioCfg ioConfig) int {
 	files, err := collectFiles(opts.paths)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, wrapError(errCollectFiles, err))
+		_, _ = fmt.Fprintln(ioCfg.err, wrapError(errCollectFiles, err))
 
 		return exitError
 	}
 
-	changed, err := processFiles(files, cfg, opts)
+	changed, err := processFiles(files, cfg, opts, ioCfg)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(ioCfg.err, err)
 
 		return exitError
 	}
@@ -168,11 +222,12 @@ func processFiles(
 	files []string,
 	cfg config.Config,
 	opts runOptions,
+	ioCfg ioConfig,
 ) (bool, error) {
 	changed := false
 
 	for _, path := range files {
-		fileChanged, err := processFile(path, cfg, opts)
+		fileChanged, err := processFile(path, cfg, opts, ioCfg)
 		if err != nil {
 			return false, err
 		}
@@ -189,6 +244,7 @@ func processFile(
 	path string,
 	cfg config.Config,
 	opts runOptions,
+	ioCfg ioConfig,
 ) (bool, error) {
 	src, info, err := readFile(path)
 	if err != nil {
@@ -201,10 +257,10 @@ func processFile(
 	}
 
 	if bytes.Equal(src, out) {
-		return handleUnchangedOutput(out, opts)
+		return handleUnchangedOutput(out, opts, ioCfg)
 	}
 
-	return handleChangedOutput(path, info, out, opts)
+	return handleChangedOutput(path, info, out, opts, ioCfg)
 }
 
 //nolint:gosec // CLI intentionally reads user-provided paths.
@@ -222,9 +278,13 @@ func readFile(path string) ([]byte, os.FileInfo, error) {
 	return src, info, nil
 }
 
-func handleUnchangedOutput(out []byte, opts runOptions) (bool, error) {
+func handleUnchangedOutput(
+	out []byte,
+	opts runOptions,
+	ioCfg ioConfig,
+) (bool, error) {
 	if !opts.check && !opts.write {
-		_, _ = os.Stdout.Write(out)
+		_, _ = ioCfg.out.Write(out)
 	}
 
 	return false, nil
@@ -235,6 +295,7 @@ func handleChangedOutput(
 	info os.FileInfo,
 	out []byte,
 	opts runOptions,
+	ioCfg ioConfig,
 ) (bool, error) {
 	if opts.check {
 		return true, nil
@@ -249,23 +310,9 @@ func handleChangedOutput(
 		return true, nil
 	}
 
-	_, _ = os.Stdout.Write(out)
+	_, _ = ioCfg.out.Write(out)
 
 	return true, nil
-}
-
-func printUsage(binName string) {
-	lines := []string{
-		fmt.Sprintf("usage: %s [flags] [path ...]", binName),
-		"",
-		"flags:",
-		"  -w\twrite result to (source) file instead of stdout",
-		"  -check\texit with non-zero status if formatting would change" +
-			" any files",
-	}
-	msg := strings.Join(lines, "\n")
-
-	_, _ = os.Stderr.WriteString(msg)
 }
 
 func collectFiles(paths []string) ([]string, error) {
@@ -360,14 +407,6 @@ func isTerraformFile(path string) bool {
 	name := strings.ToLower(path)
 
 	return strings.HasSuffix(name, ".tf") || strings.HasSuffix(name, ".tfvars")
-}
-
-func emptyRunOptions() runOptions {
-	return runOptions{
-		write: false,
-		check: false,
-		paths: nil,
-	}
 }
 
 func wrapError(errType error, err error) error {

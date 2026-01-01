@@ -8,5 +8,5 @@ import (
 )
 
 func main() {
-	os.Exit(cli.Run("terraformat"))
+	os.Exit(cli.Execute())
 }
