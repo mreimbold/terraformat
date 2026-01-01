@@ -362,15 +362,14 @@ func localsSortKey(item bodyItem) sortKey {
 
 	if item.kind == itemAttribute {
 		key.group = localsGroupAttributes
-		key.name = item.name
+		key.order = item.origIndex
 
 		return key
 	}
 
 	if item.kind == itemBlock {
 		key.group = localsGroupBlocks
-		key.name = item.name
-		key.label = item.labelKey
+		key.order = item.origIndex
 
 		return key
 	}

@@ -37,10 +37,10 @@ variable "region" {
 }
 
 locals {
-  name = "app"
   tags = {
     Env = "dev"
   }
+  name = "app"
 }
 
 data "aws_caller_identity" "current" {}
