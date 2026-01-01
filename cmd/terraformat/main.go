@@ -1,3 +1,4 @@
+// Package main provides the terraformat CLI.
 package main
 
 import (

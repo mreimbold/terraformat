@@ -14,43 +14,73 @@ type sortKey struct {
 	index int
 }
 
-var topLevelBlockOrder = map[string]int{
-	"terraform": 0,
-	"provider":  1,
-	"variable":  2,
-	"locals":    3,
-	"data":      4,
-	"resource":  5,
-	"module":    6,
-	"output":    7,
-	"moved":     8,
-	"import":    9,
-	"check":     10,
-	"assert":    11,
-}
+const (
+	sortGroupDefault = iota
+)
+
+const (
+	sortOrderDefault = iota
+)
+
+const (
+	rootGroupAttributes = iota
+	rootGroupBlocks
+)
+
+const (
+	rootAttrOrderDefault = iota
+)
+
+type topLevelOrder int
+
+const (
+	topOrderTerraform topLevelOrder = iota
+	topOrderProvider
+	topOrderVariable
+	topOrderLocals
+	topOrderData
+	topOrderResource
+	topOrderModule
+	topOrderOutput
+	topOrderMoved
+	topOrderImport
+	topOrderCheck
+	topOrderAssert
+)
+
+const topOrderUnknown topLevelOrder = 100
 
 func sortBodyItems(items []bodyItem, ctx bodyContext, cfg config.Config) {
-	for i := range items {
-		items[i].origIndex = i
+	for itemIndex := range items {
+		items[itemIndex].origIndex = itemIndex
 	}
 
-	sort.SliceStable(items, func(i, j int) bool {
-		left := itemSortKey(items[i], ctx, cfg)
-		right := itemSortKey(items[j], ctx, cfg)
-		if left.group != right.group {
-			return left.group < right.group
-		}
-		if left.order != right.order {
-			return left.order < right.order
-		}
-		if left.name != right.name {
-			return left.name < right.name
-		}
-		if left.label != right.label {
-			return left.label < right.label
-		}
-		return left.index < right.index
+	sort.SliceStable(items, func(leftIndex, rightIndex int) bool {
+		left := itemSortKey(items[leftIndex], ctx, cfg)
+		right := itemSortKey(items[rightIndex], ctx, cfg)
+
+		return lessSortKey(left, right)
 	})
+}
+
+func lessSortKey(left sortKey, right sortKey) bool {
+	if left.group != right.group {
+		return left.group < right.group
+	}
+
+	if left.order != right.order {
+		return left.order < right.order
+	}
+
+	if left.name != right.name {
+		return left.name < right.name
+	}
+
+	if left.label != right.label {
+		return left.label < right.label
+	}
+
+	return left.index < right.index
 }
 
 func itemSortKey(item bodyItem, ctx bodyContext, cfg config.Config) sortKey {
@@ -58,52 +88,92 @@ func itemSortKey(item bodyItem, ctx bodyContext, cfg config.Config) sortKey {
 		return rootSortKey(item, cfg)
 	}
 
-	switch ctx.blockType {
-	case "resource", "data":
-		return resourceSortKey(item)
-	case "variable":
-		return variableSortKey(item)
-	case "output":
-		return outputSortKey(item)
-	case "module":
-		return moduleSortKey(item)
-	case "provider":
-		return providerSortKey(item)
-	case "terraform":
-		return terraformSortKey(item)
-	case "locals":
-		return localsSortKey(item)
-	case "lifecycle":
-		return lifecycleSortKey(item)
-	default:
+	sorter := blockSorter(ctx.blockType)
+	if sorter == nil {
 		return defaultSortKey(item)
 	}
+
+	return sorter(item)
+}
+
+func blockSorter(blockType string) func(bodyItem) sortKey {
+	sorters := map[string]func(bodyItem) sortKey{
+		"resource":  resourceSortKey,
+		"data":      resourceSortKey,
+		"variable":  variableSortKey,
+		"output":    outputSortKey,
+		"module":    moduleSortKey,
+		"provider":  providerSortKey,
+		"terraform": terraformSortKey,
+		"locals":    localsSortKey,
+		"lifecycle": lifecycleSortKey,
+	}
+
+	return sorters[blockType]
 }
 
 func rootSortKey(item bodyItem, cfg config.Config) sortKey {
-	key := sortKey{index: item.origIndex}
+	key := newSortKey(item.origIndex)
+
 	if item.kind == itemAttribute {
-		key.group = 0
+		key.group = rootGroupAttributes
+
 		if cfg.EnforceAttributeOrder {
-			key.order = 0
+			key.order = rootAttrOrderDefault
 			key.name = item.name
+
 			return key
 		}
+
 		key.order = item.origIndex
+
 		return key
 	}
 
-	key.group = 1
+	key.group = rootGroupBlocks
+
 	if cfg.EnforceBlockOrder {
-		if order, ok := topLevelBlockOrder[item.name]; ok {
-			key.order = order
+		order, ok := topLevelBlockOrder()[item.name]
+		if ok {
+			key.order = int(order)
 		} else {
-			key.order = 100
+			key.order = int(topOrderUnknown)
 		}
+
 		key.name = item.name
 		key.label = item.labelKey
+
 		return key
 	}
+
 	key.order = item.origIndex
+
 	return key
+}
+
+func newSortKey(index int) sortKey {
+	return sortKey{
+		group: sortGroupDefault,
+		order: sortOrderDefault,
+		name:  "",
+		label: "",
+		index: index,
+	}
+}
+
+func topLevelBlockOrder() map[string]topLevelOrder {
+	return map[string]topLevelOrder{
+		"terraform": topOrderTerraform,
+		"provider":  topOrderProvider,
+		"variable":  topOrderVariable,
+		"locals":    topOrderLocals,
+		"data":      topOrderData,
+		"resource":  topOrderResource,
+		"module":    topOrderModule,
+		"output":    topOrderOutput,
+		"moved":     topOrderMoved,
+		"import":    topOrderImport,
+		"check":     topOrderCheck,
+		"assert":    topOrderAssert,
+	}
 }

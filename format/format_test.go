@@ -1,4 +1,4 @@
-package format
+package format_test
 
 import (
 	"bytes"
@@ -8,54 +8,95 @@ import (
 	"testing"
 
 	"github.com/mreimbold/terraformat/config"
+	tfformat "github.com/mreimbold/terraformat/format"
 )
 
-func TestFormatGolden(t *testing.T) {
-	inputs, err := filepath.Glob("testdata/*.input.tf")
-	if err != nil {
-		t.Fatalf("glob: %v", err)
-	}
-	if len(inputs) == 0 {
-		t.Fatal("no input files found")
-	}
+const (
+	zero        = 0
+	replaceOnce = 1
+)
 
-	for _, input := range inputs {
-		name := strings.TrimSuffix(filepath.Base(input), ".input.tf")
+// TestFormatGolden verifies formatting against golden files.
+func TestFormatGolden(t *testing.T) {
+	t.Parallel()
+
+	inputs := mustGlob(t, "testdata/*.input.tf")
+	for _, inputPath := range inputs {
+		name := strings.TrimSuffix(filepath.Base(inputPath), ".input.tf")
 		t.Run(name, func(t *testing.T) {
-			src, err := os.ReadFile(input)
-			if err != nil {
-				t.Fatalf("read input: %v", err)
-			}
-			got, err := Format(src, config.Default())
-			if err != nil {
-				t.Fatalf("format: %v", err)
-			}
-			golden := strings.Replace(input, ".input.tf", ".golden.tf", 1)
-			want, err := os.ReadFile(golden)
-			if err != nil {
-				t.Fatalf("read golden: %v", err)
-			}
-			if !bytes.Equal(got, want) {
-				t.Fatalf("output did not match golden\n--- got ---\n%s\n--- want ---\n%s", got, want)
-			}
+			t.Parallel()
+			runGoldenCase(t, inputPath)
 		})
 	}
 }
 
+// TestIdempotent ensures formatting is idempotent.
 func TestIdempotent(t *testing.T) {
-	src, err := os.ReadFile("testdata/basic.input.tf")
-	if err != nil {
-		t.Fatalf("read input: %v", err)
+	t.Parallel()
+
+	src := mustReadFile(t, "testdata/basic.input.tf")
+	first := mustFormat(t, src)
+	second := mustFormat(t, first)
+
+	if !bytes.Equal(first, second) {
+		t.Fatal("formatting is not idempotent")
 	}
-	first, err := Format(src, config.Default())
+}
+
+func runGoldenCase(t *testing.T, inputPath string) {
+	t.Helper()
+
+	src := mustReadFile(t, inputPath)
+	got := mustFormat(t, src)
+	golden := strings.Replace(
+		inputPath,
+		".input.tf",
+		".golden.tf",
+		replaceOnce,
+	)
+	want := mustReadFile(t, golden)
+
+	if !bytes.Equal(got, want) {
+		message := "output did not match golden" +
+			"\n--- got ---\n%s\n--- want ---\n%s"
+		t.Fatalf(message, got, want)
+	}
+}
+
+func mustFormat(t *testing.T, src []byte) []byte {
+	t.Helper()
+
+	formatted, err := tfformat.Format(src, config.Default())
 	if err != nil {
 		t.Fatalf("format: %v", err)
 	}
-	second, err := Format(first, config.Default())
+
+	return formatted
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+
+	//nolint:gosec // Test helper reads local testdata paths.
+	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("format second: %v", err)
+		t.Fatalf("read %s: %v", path, err)
 	}
-	if !bytes.Equal(first, second) {
-		t.Fatalf("formatting is not idempotent")
+
+	return data
+}
+
+func mustGlob(t *testing.T, pattern string) []string {
+	t.Helper()
+
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		t.Fatalf("glob: %v", err)
 	}
+
+	if len(matches) == zero {
+		t.Fatal("no input files found")
+	}
+
+	return matches
 }
