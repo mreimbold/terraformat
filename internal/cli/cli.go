@@ -26,6 +26,8 @@ const (
 	exitCheckDiff = 3
 )
 
+var version = "dev"
+
 const (
 	stdinArg  = "-"
 	emptyPath = ""
@@ -163,6 +165,7 @@ func newRootCommand() *cobra.Command {
 	cmd := new(cobra.Command)
 	cmd.Use = "terraformat [options] [target...]"
 	cmd.Short = "Rewrite Terraform files to a canonical format"
+	cmd.Version = version
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
