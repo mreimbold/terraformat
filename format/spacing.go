@@ -1,6 +1,8 @@
 package format
 
 import (
+	"bytes"
+
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 )
@@ -36,8 +38,9 @@ func normalizePrefixTokens(tokens hclwrite.Tokens) hclwrite.Tokens {
 
 	kept := tokens[firstComment:]
 
-	//nolint:revive // add-constant: explicit zero max newlines.
-	return trimTrailingNewlines(kept, 0)
+	maxNewlines := trailingNewlinesAfterComment(kept)
+
+	return trimTrailingNewlines(kept, maxNewlines)
 }
 
 func normalizeLeadingTokens(tokens hclwrite.Tokens) hclwrite.Tokens {
@@ -47,8 +50,9 @@ func normalizeLeadingTokens(tokens hclwrite.Tokens) hclwrite.Tokens {
 	}
 
 	if containsComment(tokens) {
-		//nolint:revive // add-constant: explicit zero max newlines.
-		return trimTrailingNewlines(tokens, 0)
+		maxNewlines := trailingNewlinesAfterComment(tokens)
+
+		return trimTrailingNewlines(tokens, maxNewlines)
 	}
 
 	if containsNewline(tokens) {
@@ -76,6 +80,28 @@ func containsComment(tokens hclwrite.Tokens) bool {
 	}
 
 	return false
+}
+
+func trailingNewlinesAfterComment(tokens hclwrite.Tokens) int {
+	lastComment := indexNotFound
+
+	for tokenIndex := len(tokens) - indexOffset; tokenIndex >= indexFirst; tokenIndex-- {
+		if tokens[tokenIndex].Type == hclsyntax.TokenComment {
+			lastComment = tokenIndex
+
+			break
+		}
+	}
+
+	if lastComment == indexNotFound {
+		return 0
+	}
+
+	if bytes.HasSuffix(tokens[lastComment].Bytes, []byte("\n")) {
+		return 0
+	}
+
+	return 1
 }
 
 func trimTrailingNewlines(

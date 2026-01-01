@@ -140,8 +140,9 @@ func rootSortKey(item bodyItem, cfg config.Config) sortKey {
 			key.order = int(topOrderUnknown)
 		}
 
-		key.name = item.name
-		key.label = item.labelKey
+		if shouldSortRootLabels(item.name) {
+			key.label = item.labelKey
+		}
 
 		return key
 	}
@@ -175,5 +176,14 @@ func topLevelBlockOrder() map[string]topLevelOrder {
 		"import":    topOrderImport,
 		"check":     topOrderCheck,
 		"assert":    topOrderAssert,
+	}
+}
+
+func shouldSortRootLabels(blockType string) bool {
+	switch blockType {
+	case "variable", "output":
+		return true
+	default:
+		return false
 	}
 }

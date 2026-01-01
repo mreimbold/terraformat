@@ -142,7 +142,7 @@ func resourceSortKey(item bodyItem) sortKey {
 			key.order = sortOrderDefault
 		default:
 			key.group = resourceGroupAttributes
-			key.name = item.name
+			key.order = item.origIndex
 		}
 
 		return key
@@ -156,8 +156,7 @@ func resourceSortKey(item bodyItem) sortKey {
 		}
 
 		key.group = resourceGroupBlocks
-		key.name = item.name
-		key.label = item.labelKey
+		key.order = item.origIndex
 
 		return key
 	}

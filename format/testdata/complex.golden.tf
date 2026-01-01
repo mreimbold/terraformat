@@ -54,14 +54,15 @@ resource "aws_instance" "app" {
     Name = "app"
   }
 
+  provisioner "local-exec" {
+    command = "echo hi"
+  }
+
   network_interface {
     device_index         = 0
     network_interface_id = aws_network_interface.app.id
   }
 
-  provisioner "local-exec" {
-    command = "echo hi"
-  }
   provisioner "local-exec" {
     command = "echo bye"
   }
@@ -76,17 +77,17 @@ resource "aws_instance" "app" {
 resource "aws_security_group" "app" {
   name = "app"
 
-  egress {
-    protocol    = "-1"
-    from_port   = 0
-    to_port     = 0
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   ingress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
     cidr_blocks = ["0.0.0.0/0"]
   }
 }

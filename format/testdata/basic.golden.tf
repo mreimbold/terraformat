@@ -5,17 +5,6 @@ variable "name" {
   default     = "web"
 }
 
-resource "aws_instance" "a" {
-  provider = aws.foo
-
-  ami = "ami-a"
-  tags = {
-    Name = "a"
-  }
-
-  depends_on = [aws_instance.b]
-}
-
 resource "aws_instance" "b" {
   count = 1
 
@@ -26,4 +15,15 @@ resource "aws_instance" "b" {
   }
 
   depends_on = [aws_vpc.main]
+}
+
+resource "aws_instance" "a" {
+  provider = aws.foo
+
+  tags = {
+    Name = "a"
+  }
+  ami = "ami-a"
+
+  depends_on = [aws_instance.b]
 }
