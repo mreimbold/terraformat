@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	exitOK        = 0
-	exitDiff      = 1
-	exitError     = 2
+	exitOK    = 0
+	exitDiff  = 1
+	exitError = 2
 )
 
 func Run(binName string) int {

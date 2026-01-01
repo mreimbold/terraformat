@@ -2,10 +2,10 @@ package config
 
 // Config controls which formatting rules are applied.
 type Config struct {
-	EnforceBlockOrder     bool
-	EnforceAttributeOrder bool
+	EnforceBlockOrder      bool
+	EnforceAttributeOrder  bool
 	EnforceTopLevelSpacing bool
-	EnsureEOFNewline      bool
+	EnsureEOFNewline       bool
 }
 
 // Default returns the default formatting configuration.
