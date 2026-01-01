@@ -1,0 +1,66 @@
+version: "2"
+
+run:
+  timeout: 10m
+  tests: true
+  relative-path-mode: gomod
+  modules-download-mode: readonly
+
+linters:
+  default: all
+  disable:
+    - wsl
+  exclusions:
+    generated: disable
+    warn-unused: true
+    presets: []
+
+  settings:
+    depguard:
+      rules:
+        Main:
+          files:
+            - $all
+          allow:
+            - $gostd
+            - github.com/mreimbold/terraformat/config
+            - github.com/mreimbold/terraformat/format
+            - github.com/mreimbold/terraformat/internal/cli
+            - github.com/hashicorp/hcl/v2
+            - github.com/hashicorp/hcl/v2/hclwrite
+            - github.com/hashicorp/hcl/v2/hclsyntax
+
+    gocyclo:
+      min-complexity: 10
+
+    godoclint:
+      default: all
+
+    revive:
+      severity: error
+      enable-all-rules: true
+      enable-default-rules: true
+      directives:
+        - name: specify-disable-reason
+          severity: error
+      confidence: 0.1
+
+    nolintlint:
+      allow-unused: false
+      allow-no-explanation: []
+      require-explanation: true
+      require-specific: true
+
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false
+  new: false
+
+severity:
+  default: error
