@@ -32,12 +32,31 @@ const (
 )
 
 const (
+	shortFlagPrefix = "-"
+	longFlagPrefix  = "--"
+)
+
+const (
 	startLine   = 1
 	startColumn = 1
 	startByte   = 0
 )
 
+const (
+	indexFirst = 0
+)
+
 const formattedFilePerm = 0o644
+
+const (
+	flagList      = "list"
+	flagWrite     = "write"
+	flagDiff      = "diff"
+	flagCheck     = "check"
+	flagNoColor   = "no-color"
+	flagRecursive = "recursive"
+	flagHelp      = "help"
+)
 
 const (
 	diffCommand     = "diff"
@@ -119,9 +138,21 @@ type checkPlan struct {
 	buffer  *bytes.Buffer
 }
 
+type colorlessWriter struct {
+	writer io.Writer
+}
+
+// Write forwards bytes without adding color.
+func (cw colorlessWriter) Write(p []byte) (int, error) {
+	count, err := cw.writer.Write(p)
+
+	return count, wrapExternalError(err)
+}
+
 // Execute runs the terraformat CLI and returns the exit code.
 func Execute() int {
 	cmd := newRootCommand()
+	cmd.SetArgs(rewriteSingleDashArgs(os.Args[1:]))
 
 	return executeCommand(cmd)
 }
@@ -158,12 +189,12 @@ func newRootCommand() *cobra.Command {
 		return nil
 	})
 
-	cmd.Flags().BoolVar(&opts.list, "list", true, "list")
-	cmd.Flags().BoolVar(&opts.write, "write", true, "write")
-	cmd.Flags().BoolVar(&opts.diff, "diff", false, "diff")
-	cmd.Flags().BoolVar(&opts.check, "check", false, "check")
-	cmd.Flags().BoolVar(&opts.noColor, "no-color", false, "no-color")
-	cmd.Flags().BoolVar(&opts.recursive, "recursive", false, "recursive")
+	cmd.Flags().BoolVar(&opts.list, flagList, true, flagList)
+	cmd.Flags().BoolVar(&opts.write, flagWrite, true, flagWrite)
+	cmd.Flags().BoolVar(&opts.diff, flagDiff, false, flagDiff)
+	cmd.Flags().BoolVar(&opts.check, flagCheck, false, flagCheck)
+	cmd.Flags().BoolVar(&opts.noColor, flagNoColor, false, flagNoColor)
+	cmd.Flags().BoolVar(&opts.recursive, flagRecursive, false, flagRecursive)
 	cmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
 		_, _ = fmt.Fprintf(
 			cmd.ErrOrStderr(),
@@ -252,9 +283,9 @@ func runFmt(cfg config.Config, opts fmtOptions, ioCfg ioConfig) int {
 		resolved = applyStdinDefaults(resolved)
 	}
 
-	_ = resolved.noColor
+	colorlessCfg := applyNoColor(resolved, ioCfg)
 
-	resolved, plan, runCfg := planCheck(resolved, ioCfg)
+	resolved, plan, runCfg := planCheck(resolved, colorlessCfg)
 
 	var err error
 	if stdin {
@@ -286,6 +317,68 @@ func normalizeTargets(targets []string) (bool, []string) {
 	return false, targets
 }
 
+func rewriteSingleDashArgs(args []string) []string {
+	if len(args) == indexFirst {
+		return nil
+	}
+
+	rewritten := make([]string, indexFirst, len(args))
+	for _, arg := range args {
+		rewrite := rewriteSingleDashArg(arg)
+		rewritten = append(rewritten, rewrite)
+	}
+
+	return rewritten
+}
+
+func rewriteSingleDashArg(arg string) string {
+	trimmed, ok := trimSingleDashArg(arg)
+	if !ok {
+		return arg
+	}
+
+	return rewriteKnownFlag(trimmed, arg)
+}
+
+func trimSingleDashArg(arg string) (string, bool) {
+	if arg == stdinArg {
+		return emptyPath, false
+	}
+
+	if !strings.HasPrefix(arg, shortFlagPrefix) ||
+		strings.HasPrefix(arg, longFlagPrefix) {
+		return emptyPath, false
+	}
+
+	return strings.TrimPrefix(arg, shortFlagPrefix), true
+}
+
+func rewriteKnownFlag(trimmed string, original string) string {
+	for _, name := range fmtLongFlags() {
+		if trimmed == name {
+			return longFlagPrefix + trimmed
+		}
+
+		if strings.HasPrefix(trimmed, name+"=") {
+			return longFlagPrefix + trimmed
+		}
+	}
+
+	return original
+}
+
+func fmtLongFlags() []string {
+	return []string{
+		flagList,
+		flagWrite,
+		flagDiff,
+		flagCheck,
+		flagNoColor,
+		flagRecursive,
+		flagHelp,
+	}
+}
+
 func applyFmtDefaults(opts fmtOptions) fmtOptions {
 	resolved := opts
 	if resolved.check {
@@ -301,6 +394,17 @@ func applyStdinDefaults(opts fmtOptions) fmtOptions {
 	resolved.write = false
 
 	return resolved
+}
+
+func applyNoColor(opts fmtOptions, ioCfg ioConfig) ioConfig {
+	if !opts.noColor {
+		return ioCfg
+	}
+
+	ioCfg.out = colorlessWriter{writer: ioCfg.out}
+	ioCfg.err = colorlessWriter{writer: ioCfg.err}
+
+	return ioCfg
 }
 
 func readAll(reader io.Reader, path string) ([]byte, error) {
