@@ -48,8 +48,8 @@ const (
 )
 
 const (
-	outputOrderValue = iota
-	outputOrderDescription
+	outputOrderDescription = iota
+	outputOrderValue
 	outputOrderSensitive
 )
 
@@ -215,12 +215,12 @@ func outputSortKey(item bodyItem) sortKey {
 
 	if item.kind == itemAttribute {
 		switch item.name {
-		case "value":
-			key.group = outputGroupAttributes
-			key.order = outputOrderValue
 		case "description":
 			key.group = outputGroupAttributes
 			key.order = outputOrderDescription
+		case "value":
+			key.group = outputGroupAttributes
+			key.order = outputOrderValue
 		case "sensitive":
 			key.group = outputGroupAttributes
 			key.order = outputOrderSensitive
@@ -420,15 +420,14 @@ func defaultSortKey(item bodyItem) sortKey {
 
 	if item.kind == itemAttribute {
 		key.group = defaultGroupAttributes
-		key.name = item.name
+		key.order = item.origIndex
 
 		return key
 	}
 
 	if item.kind == itemBlock {
 		key.group = defaultGroupBlocks
-		key.name = item.name
-		key.label = item.labelKey
+		key.order = item.origIndex
 
 		return key
 	}
