@@ -68,7 +68,7 @@ func emptyBodyItems() bodyItems {
 }
 
 func (collection bodyItems) isEmpty() bool {
-	return len(collection.items) == zero
+	return len(collection.items) == indexFirst
 }
 
 // Format applies terraformat rules to a Terraform/HCL document.
@@ -164,11 +164,11 @@ func shouldApplyOrdering(cfg config.Config, ctx bodyContext) bool {
 func collectBodyItems(body *hclwrite.Body) (bodyItems, error) {
 	attrItems := collectAttributeItems(body.Attributes())
 	blockItems := collectBlockItems(body.Blocks())
-	items := make([]bodyItem, zero, len(attrItems)+len(blockItems))
+	items := make([]bodyItem, indexFirst, len(attrItems)+len(blockItems))
 	items = append(items, attrItems...)
 	items = append(items, blockItems...)
 
-	if len(items) == zero {
+	if len(items) == indexFirst {
 		return emptyBodyItems(), nil
 	}
 
@@ -195,7 +195,7 @@ func collectAttributeItems(attrs map[string]*hclwrite.Attribute) []bodyItem {
 		attrNames[attr] = name
 	}
 
-	items := make([]bodyItem, zero, len(attrs))
+	items := make([]bodyItem, indexFirst, len(attrs))
 	for _, attr := range attrs {
 		item := newBodyItem(
 			itemAttribute,
@@ -212,7 +212,7 @@ func collectAttributeItems(attrs map[string]*hclwrite.Attribute) []bodyItem {
 }
 
 func collectBlockItems(blocks []*hclwrite.Block) []bodyItem {
-	items := make([]bodyItem, zero, len(blocks))
+	items := make([]bodyItem, indexFirst, len(blocks))
 	for _, block := range blocks {
 		item := newBodyItem(
 			itemBlock,
@@ -256,18 +256,18 @@ func applyItemPrefixes(
 	items []bodyItem,
 	bodyTokens hclwrite.Tokens,
 ) bodyItemPrefixes {
-	prevEnd := negativeOne
+	prevEnd := indexNotFound
 
 	for itemIndex := range items {
 		start := items[itemIndex].start
-		items[itemIndex].prefix = bodyTokens[prevEnd+one : start]
+		items[itemIndex].prefix = bodyTokens[prevEnd+indexOffset : start]
 		prevEnd = items[itemIndex].end
 	}
 
-	trailing := bodyTokens[prevEnd+one:]
+	trailing := bodyTokens[prevEnd+indexOffset:]
 
-	leading := items[zero].prefix
-	items[zero].prefix = nil
+	leading := items[indexFirst].prefix
+	items[indexFirst].prefix = nil
 
 	return bodyItemPrefixes{
 		leading:  leading,
@@ -310,7 +310,7 @@ func shouldInsertBlankLine(
 	ctx bodyContext,
 	cfg config.Config,
 ) bool {
-	if index == zero {
+	if index == indexFirst {
 		return false
 	}
 
@@ -318,11 +318,14 @@ func shouldInsertBlankLine(
 		return false
 	}
 
-	return items[index-one].kind == itemBlock && items[index].kind == itemBlock
+	prevIsBlock := items[index-indexOffset].kind == itemBlock
+	currentIsBlock := items[index].kind == itemBlock
+
+	return prevIsBlock && currentIsBlock
 }
 
 func ensureTrailingNewline(src []byte) []byte {
-	if len(src) == zero || bytes.HasSuffix(src, []byte("\n")) {
+	if len(src) == indexFirst || bytes.HasSuffix(src, []byte("\n")) {
 		return src
 	}
 
@@ -345,8 +348,8 @@ func newBodyItem(
 		labelKey:  labelKey,
 		tokens:    tokens,
 		prefix:    nil,
-		origIndex: zero,
-		start:     zero,
-		end:       zero,
+		origIndex: indexFirst,
+		start:     indexFirst,
+		end:       indexFirst,
 	}
 }

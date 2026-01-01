@@ -11,10 +11,7 @@ import (
 	tfformat "github.com/mreimbold/terraformat/format"
 )
 
-const (
-	zero        = 0
-	replaceOnce = 1
-)
+const replaceOnce = 1
 
 // TestFormatGolden verifies formatting against golden files.
 func TestFormatGolden(t *testing.T) {
@@ -94,7 +91,8 @@ func mustGlob(t *testing.T, pattern string) []string {
 		t.Fatalf("glob: %v", err)
 	}
 
-	if len(matches) == zero {
+	//nolint:revive // add-constant: len check is clear here.
+	if len(matches) == 0 {
 		t.Fatal("no input files found")
 	}
 

@@ -11,23 +11,24 @@ func findTokenSpan(
 	allTokens hclwrite.Tokens,
 	itemTokens hclwrite.Tokens,
 ) (tokenSpan, bool) {
-	if len(itemTokens) == zero {
-		return tokenSpan{start: zero, end: negativeOne}, false
+	//nolint:revive // add-constant: len check is clear here.
+	if len(itemTokens) == 0 {
+		return tokenSpan{start: indexFirst, end: indexNotFound}, false
 	}
 
 	lastStart := len(allTokens) - len(itemTokens)
 
-	for startIndex := zero; startIndex <= lastStart; startIndex++ {
+	for startIndex := indexFirst; startIndex <= lastStart; startIndex++ {
 		if !tokensMatchAt(allTokens, itemTokens, startIndex) {
 			continue
 		}
 
-		endIndex := startIndex + len(itemTokens) - one
+		endIndex := startIndex + len(itemTokens) - indexOffset
 
 		return tokenSpan{start: startIndex, end: endIndex}, true
 	}
 
-	return tokenSpan{start: zero, end: negativeOne}, false
+	return tokenSpan{start: indexFirst, end: indexNotFound}, false
 }
 
 func tokensMatchAt(
@@ -35,11 +36,11 @@ func tokensMatchAt(
 	itemTokens hclwrite.Tokens,
 	startIndex int,
 ) bool {
-	if allTokens[startIndex] != itemTokens[zero] {
+	if allTokens[startIndex] != itemTokens[indexFirst] {
 		return false
 	}
 
-	for itemIndex := one; itemIndex < len(itemTokens); itemIndex++ {
+	for itemIndex := indexOffset; itemIndex < len(itemTokens); itemIndex++ {
 		if allTokens[startIndex+itemIndex] != itemTokens[itemIndex] {
 			return false
 		}

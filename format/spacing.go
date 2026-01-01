@@ -7,18 +7,20 @@ import (
 
 func newlineToken() *hclwrite.Token {
 	return &hclwrite.Token{
-		Type:         hclsyntax.TokenNewline,
-		Bytes:        []byte{'\n'},
-		SpacesBefore: zero,
+		Type:  hclsyntax.TokenNewline,
+		Bytes: []byte{'\n'},
+		//nolint:revive // add-constant: zero spaces before newlines.
+		SpacesBefore: 0,
 	}
 }
 
 func normalizePrefixTokens(tokens hclwrite.Tokens) hclwrite.Tokens {
-	if len(tokens) == zero {
+	//nolint:revive // add-constant: len check is clear here.
+	if len(tokens) == 0 {
 		return nil
 	}
 
-	firstComment := negativeOne
+	firstComment := indexNotFound
 
 	for tokenIndex, token := range tokens {
 		if token.Type == hclsyntax.TokenComment {
@@ -28,22 +30,25 @@ func normalizePrefixTokens(tokens hclwrite.Tokens) hclwrite.Tokens {
 		}
 	}
 
-	if firstComment == negativeOne {
+	if firstComment == indexNotFound {
 		return nil
 	}
 
 	kept := tokens[firstComment:]
 
-	return trimTrailingNewlines(kept, zero)
+	//nolint:revive // add-constant: explicit zero max newlines.
+	return trimTrailingNewlines(kept, 0)
 }
 
 func normalizeLeadingTokens(tokens hclwrite.Tokens) hclwrite.Tokens {
-	if len(tokens) == zero {
+	//nolint:revive // add-constant: len check is clear here.
+	if len(tokens) == 0 {
 		return nil
 	}
 
 	if containsComment(tokens) {
-		return trimTrailingNewlines(tokens, zero)
+		//nolint:revive // add-constant: explicit zero max newlines.
+		return trimTrailingNewlines(tokens, 0)
 	}
 
 	if containsNewline(tokens) {
@@ -77,21 +82,22 @@ func trimTrailingNewlines(
 	tokens hclwrite.Tokens,
 	maxNewlines int,
 ) hclwrite.Tokens {
-	if len(tokens) == zero {
+	//nolint:revive // add-constant: len check is clear here.
+	if len(tokens) == 0 {
 		return nil
 	}
 
-	last := len(tokens) - one
+	last := len(tokens) - indexOffset
 
-	for last >= zero && tokens[last].Type == hclsyntax.TokenNewline {
+	for last >= indexFirst && tokens[last].Type == hclsyntax.TokenNewline {
 		last--
 	}
 
-	if last == len(tokens)-one {
+	if last == len(tokens)-indexOffset {
 		return tokens
 	}
 
-	newEnd := last + one + maxNewlines
+	newEnd := last + indexOffset + maxNewlines
 	newEnd = min(newEnd, len(tokens))
 
 	return tokens[:newEnd]

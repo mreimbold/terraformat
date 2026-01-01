@@ -67,7 +67,8 @@ func Run(binName string) int {
 
 	cfg := config.Default()
 
-	if len(opts.paths) == zero {
+	//nolint:revive // add-constant: len check is clear here.
+	if len(opts.paths) == 0 {
 		return runOnStdin(cfg, opts)
 	}
 
@@ -105,7 +106,8 @@ func validateOptions(opts runOptions) error {
 		return errWriteAndCheck
 	}
 
-	if len(opts.paths) == zero && opts.write {
+	//nolint:revive // add-constant: len check is clear here.
+	if len(opts.paths) == 0 && opts.write {
 		return errWriteNeedsArguments
 	}
 
