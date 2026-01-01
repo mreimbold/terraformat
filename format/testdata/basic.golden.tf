@@ -7,18 +7,23 @@ variable "name" {
 
 resource "aws_instance" "a" {
   provider = aws.foo
-  ami      = "ami-a"
+
+  ami = "ami-a"
   tags = {
     Name = "a"
   }
+
   depends_on = [aws_instance.b]
 }
 
 resource "aws_instance" "b" {
   count = 1
-  ami   = "ami-b"
+
+  ami = "ami-b"
+
   lifecycle {
     prevent_destroy = true
   }
+
   depends_on = [aws_vpc.main]
 }

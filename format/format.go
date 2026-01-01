@@ -59,6 +59,12 @@ type bodyItemPrefixes struct {
 	trailing hclwrite.Tokens
 }
 
+type spacingGroup struct {
+	group     int
+	blockType string
+	kind      itemKind
+}
+
 func emptyBodyItems() bodyItems {
 	return bodyItems{
 		leading:  nil,
@@ -314,14 +320,48 @@ func shouldInsertBlankLine(
 		return false
 	}
 
-	if !cfg.EnforceTopLevelSpacing || !ctx.root {
+	if !cfg.EnforceTopLevelSpacing {
 		return false
 	}
 
-	prevIsBlock := items[index-indexOffset].kind == itemBlock
-	currentIsBlock := items[index].kind == itemBlock
+	prev := items[index-indexOffset]
+	current := items[index]
 
-	return prevIsBlock && currentIsBlock
+	if ctx.root {
+		return prev.kind == itemBlock && current.kind == itemBlock
+	}
+
+	prevGroup := itemSpacingGroup(prev, ctx, cfg)
+	currentGroup := itemSpacingGroup(current, ctx, cfg)
+
+	if prevGroup.group != currentGroup.group {
+		return true
+	}
+
+	if prev.kind != itemBlock || current.kind != itemBlock {
+		return false
+	}
+
+	return prevGroup.blockType != currentGroup.blockType
+}
+
+func itemSpacingGroup(
+	item bodyItem,
+	ctx bodyContext,
+	cfg config.Config,
+) spacingGroup {
+	key := itemSortKey(item, ctx, cfg)
+	blockType := emptyString
+
+	if item.kind == itemBlock && item.block != nil {
+		blockType = item.block.Type()
+	}
+
+	return spacingGroup{
+		group:     key.group,
+		blockType: blockType,
+		kind:      item.kind,
+	}
 }
 
 func ensureTrailingNewline(src []byte) []byte {
