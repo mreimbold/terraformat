@@ -127,21 +127,10 @@ func Execute() int {
 }
 
 func newRootCommand() *cobra.Command {
-	cmd := new(cobra.Command)
-	cmd.Use = "terraformat"
-	cmd.Short = "Format Terraform files beyond terraform fmt"
-	cmd.SilenceUsage = true
-	cmd.SilenceErrors = true
-	cmd.AddCommand(newFmtCommand())
-
-	return cmd
-}
-
-func newFmtCommand() *cobra.Command {
 	opts := defaultFmtOptions()
 
 	cmd := new(cobra.Command)
-	cmd.Use = "fmt [options] [target...]"
+	cmd.Use = "terraformat [options] [target...]"
 	cmd.Short = "Rewrite Terraform files to a canonical format"
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
@@ -190,7 +179,7 @@ func newFmtCommand() *cobra.Command {
 }
 
 func fmtHelpText() string {
-	return `Usage: terraformat fmt [options] [target...]
+	return `Usage: terraformat [options] [target...]
 
   Rewrites all Terraform configuration files to a canonical format. All
   configuration files (.tf), variables files (.tfvars), and testing files

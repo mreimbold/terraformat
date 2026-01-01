@@ -16,7 +16,7 @@ go install github.com/mreimbold/terraformat/cmd/terraformat@latest
 ## Usage
 
 ```
-terraformat -w path/to/file.tf
+terraformat -write=false path/to/file.tf
 terraformat -check path/to/dir
 cat file.tf | terraformat
 ```
