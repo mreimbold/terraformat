@@ -1,3 +1,4 @@
+// Package config defines formatter configuration defaults.
 package config
 
 // Config controls which formatting rules are applied.

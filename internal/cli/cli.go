@@ -1,3 +1,4 @@
+// Package cli provides the terraformat CLI implementation.
 package cli
 
 import (

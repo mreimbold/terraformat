@@ -26,6 +26,12 @@ linters:
             - github.com/mreimbold/terraformat/config
             - github.com/mreimbold/terraformat/format
             - github.com/mreimbold/terraformat/internal/cli
+            - github.com/mreimbold/terraformat/internal/config
+            - github.com/mreimbold/terraformat/internal/format
+            - github.com/mreimbold/terraformat/internal/format/model
+            - github.com/mreimbold/terraformat/internal/format/ordering
+            - github.com/mreimbold/terraformat/internal/format/spacing
+            - github.com/mreimbold/terraformat/internal/format/tokens
             - github.com/hashicorp/hcl/v2
             - github.com/hashicorp/hcl/v2/hclwrite
             - github.com/hashicorp/hcl/v2/hclsyntax

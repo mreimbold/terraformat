@@ -1,3 +1,4 @@
+// Package ordering defines ordering rules for formatter items.
 package ordering
 
 import (
@@ -7,6 +8,7 @@ import (
 	"github.com/mreimbold/terraformat/internal/format/model"
 )
 
+// Key defines the tuple used to order formatter items.
 type Key struct {
 	Group int
 	Order int
@@ -51,6 +53,12 @@ const (
 
 const topOrderUnknown topLevelOrder = 100
 
+const (
+	rootLabelVariable = "variable"
+	rootLabelOutput   = "output"
+)
+
+// SortItems sorts items using the configured ordering rules.
 func SortItems(items []model.Item, ctx model.Context, cfg config.Config) {
 	for itemIndex := range items {
 		items[itemIndex].OrigIndex = itemIndex
@@ -84,6 +92,7 @@ func lessKey(left Key, right Key) bool {
 	return left.Index < right.Index
 }
 
+// ItemSortKey returns the ordering key for the given item in context.
 func ItemSortKey(item model.Item, ctx model.Context, cfg config.Config) Key {
 	if ctx.Root {
 		return rootSortKey(item, cfg)
@@ -115,22 +124,29 @@ func blockSorter(blockType string) func(model.Item) Key {
 
 func rootSortKey(item model.Item, cfg config.Config) Key {
 	key := newKey(item.OrigIndex)
-
 	if item.Kind == model.ItemAttribute {
-		key.Group = rootGroupAttributes
+		return rootAttributeKey(item, cfg, key)
+	}
 
-		if cfg.EnforceAttributeOrder {
-			key.Order = rootAttrOrderDefault
-			key.Name = item.Name
+	return rootBlockKey(item, cfg, key)
+}
 
-			return key
-		}
+func rootAttributeKey(item model.Item, cfg config.Config, key Key) Key {
+	key.Group = rootGroupAttributes
 
-		key.Order = item.OrigIndex
+	if cfg.EnforceAttributeOrder {
+		key.Order = rootAttrOrderDefault
+		key.Name = item.Name
 
 		return key
 	}
 
+	key.Order = item.OrigIndex
+
+	return key
+}
+
+func rootBlockKey(item model.Item, cfg config.Config, key Key) Key {
 	key.Group = rootGroupBlocks
 
 	if cfg.EnforceBlockOrder {
@@ -182,7 +198,7 @@ func topLevelBlockOrder() map[string]topLevelOrder {
 
 func shouldSortRootLabels(blockType string) bool {
 	switch blockType {
-	case "variable", "output":
+	case rootLabelVariable, rootLabelOutput:
 		return true
 	default:
 		return false

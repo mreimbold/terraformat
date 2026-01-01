@@ -12,6 +12,7 @@ type group struct {
 	kind      model.ItemKind
 }
 
+// ShouldInsertBlankLine reports whether a blank line should be inserted.
 func ShouldInsertBlankLine(
 	items []model.Item,
 	index int,

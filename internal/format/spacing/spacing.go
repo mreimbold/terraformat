@@ -1,3 +1,4 @@
+// Package spacing normalizes whitespace between formatter items.
 package spacing
 
 import (
@@ -8,6 +9,12 @@ import (
 	"github.com/mreimbold/terraformat/internal/format/model"
 )
 
+const (
+	maxNewlinesNone   = 0
+	maxNewlinesSingle = 1
+)
+
+// NewlineToken returns a newline token.
 func NewlineToken() *hclwrite.Token {
 	return &hclwrite.Token{
 		Type:  hclsyntax.TokenNewline,
@@ -17,6 +24,7 @@ func NewlineToken() *hclwrite.Token {
 	}
 }
 
+// NormalizePrefixTokens trims prefixes and preserves trailing comment spacing.
 func NormalizePrefixTokens(tokens hclwrite.Tokens) hclwrite.Tokens {
 	//nolint:revive // add-constant: len check is clear here.
 	if len(tokens) == 0 {
@@ -44,6 +52,7 @@ func NormalizePrefixTokens(tokens hclwrite.Tokens) hclwrite.Tokens {
 	return trimTrailingNewlines(kept, maxNewlines)
 }
 
+// NormalizeLeadingTokens normalizes leading tokens to a single newline.
 func NormalizeLeadingTokens(tokens hclwrite.Tokens) hclwrite.Tokens {
 	//nolint:revive // add-constant: len check is clear here.
 	if len(tokens) == 0 {
@@ -73,6 +82,7 @@ func containsNewline(tokens hclwrite.Tokens) bool {
 	return false
 }
 
+// ContainsComment reports whether tokens include any comments.
 func ContainsComment(tokens hclwrite.Tokens) bool {
 	for _, token := range tokens {
 		if token.Type == hclsyntax.TokenComment {
@@ -86,7 +96,8 @@ func ContainsComment(tokens hclwrite.Tokens) bool {
 func trailingNewlinesAfterComment(tokens hclwrite.Tokens) int {
 	lastComment := model.IndexNotFound
 
-	for tokenIndex := len(tokens) - model.IndexOffset; tokenIndex >= model.IndexFirst; tokenIndex-- {
+	startIndex := len(tokens) - model.IndexOffset
+	for tokenIndex := startIndex; tokenIndex >= model.IndexFirst; tokenIndex-- {
 		if tokens[tokenIndex].Type == hclsyntax.TokenComment {
 			lastComment = tokenIndex
 
@@ -95,14 +106,14 @@ func trailingNewlinesAfterComment(tokens hclwrite.Tokens) int {
 	}
 
 	if lastComment == model.IndexNotFound {
-		return 0
+		return maxNewlinesNone
 	}
 
 	if bytes.HasSuffix(tokens[lastComment].Bytes, []byte("\n")) {
-		return 0
+		return maxNewlinesNone
 	}
 
-	return 1
+	return maxNewlinesSingle
 }
 
 func trimTrailingNewlines(
@@ -116,7 +127,8 @@ func trimTrailingNewlines(
 
 	last := len(tokens) - model.IndexOffset
 
-	for last >= model.IndexFirst && tokens[last].Type == hclsyntax.TokenNewline {
+	for last >= model.IndexFirst &&
+		tokens[last].Type == hclsyntax.TokenNewline {
 		last--
 	}
 

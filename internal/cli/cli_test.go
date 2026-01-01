@@ -1,3 +1,4 @@
+//nolint:testpackage // need access to unexported helpers for CLI wiring.
 package cli
 
 import (
@@ -6,13 +7,50 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/mreimbold/terraformat/internal/config"
 	"github.com/mreimbold/terraformat/internal/format"
 )
 
+const (
+	testInput = "resource \"aws_instance\" \"b\" {\n" +
+		"ami = \"ami-b\"\n" +
+		"}\n"
+	mainTF               = "main.tf"
+	emptyString          = ""
+	exitCodeFormat       = "exit code: %d"
+	stderrNotEmptyFormat = "stderr not empty: %s"
+	errFileUnchanged     = "file should be unchanged"
+	errRootFormatted     = "root file should be formatted"
+	errChildFormatted    = "child file should be formatted"
+	errSubdirUnchanged   = "subdir file should be unchanged"
+	permDir              = 0o750
+)
+
+type fmtResult struct {
+	stdout string
+	stderr string
+	code   int
+}
+
+type childExpectation int
+
+const (
+	expectChildUnchanged childExpectation = iota
+	expectChildFormatted
+)
+
+type recursiveCase struct {
+	recursive   bool
+	expectChild childExpectation
+}
+
+// TestRewriteSingleDashArgs ensures single-dash flags are normalized.
 func TestRewriteSingleDashArgs(t *testing.T) {
+	t.Parallel()
+
 	args := []string{
 		"-diff",
 		"-list=false",
@@ -38,41 +76,46 @@ func TestRewriteSingleDashArgs(t *testing.T) {
 	}
 }
 
+// TestRunFmtDefaultsWriteAndList checks defaults write files and list changes.
 func TestRunFmtDefaultsWriteAndList(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "main.tf")
-	input := []byte("resource \"aws_instance\" \"b\" {\nami = \"ami-b\"\n}\n")
+	path := filepath.Join(dir, mainTF)
+	input := []byte(testInput)
 	mustWriteFile(t, path, input)
 
 	opts := defaultFmtOptions()
 	opts.targets = []string{dir}
 
-	stdout, stderr, code := runFmtForTest(t, opts, bytes.NewBuffer(nil))
-	if code != exitOK {
-		t.Fatalf("exit code: %d", code)
+	result := runFmtForTest(t, opts, bytes.NewBuffer(nil))
+	if result.code != exitOK {
+		t.Fatalf(exitCodeFormat, result.code)
 	}
-	if len(stderr) != 0 {
-		t.Fatalf("stderr not empty: %s", stderr)
+
+	if result.stderr != emptyString {
+		t.Fatalf(stderrNotEmptyFormat, result.stderr)
 	}
-	if !bytes.Contains([]byte(stdout), []byte(path)) {
+
+	if !strings.Contains(result.stdout, path) {
 		t.Fatalf("expected list output to include %s", path)
 	}
 
 	want := mustFormat(t, input)
+
 	got := mustReadFile(t, path)
 	if !bytes.Equal(got, want) {
 		t.Fatalf("formatted file mismatch:\nwant: %s\n got: %s", want, got)
 	}
 }
 
+// TestRunFmtWriteFalsePrintsFormatted ensures no write prints formatted output.
 func TestRunFmtWriteFalsePrintsFormatted(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "main.tf")
-	input := []byte("resource \"aws_instance\" \"b\" {\nami = \"ami-b\"\n}\n")
+	path := filepath.Join(dir, mainTF)
+	input := []byte(testInput)
 	mustWriteFile(t, path, input)
 
 	opts := defaultFmtOptions()
@@ -80,35 +123,38 @@ func TestRunFmtWriteFalsePrintsFormatted(t *testing.T) {
 	opts.write = false
 	opts.targets = []string{path}
 
-	stdout, stderr, code := runFmtForTest(t, opts, bytes.NewBuffer(nil))
-	if code != exitOK {
-		t.Fatalf("exit code: %d", code)
+	result := runFmtForTest(t, opts, bytes.NewBuffer(nil))
+	if result.code != exitOK {
+		t.Fatalf(exitCodeFormat, result.code)
 	}
-	if len(stderr) != 0 {
-		t.Fatalf("stderr not empty: %s", stderr)
+
+	if result.stderr != emptyString {
+		t.Fatalf(stderrNotEmptyFormat, result.stderr)
 	}
 
 	want := mustFormat(t, input)
-	if !bytes.Equal([]byte(stdout), want) {
-		t.Fatalf("stdout mismatch:\nwant: %s\n got: %s", want, stdout)
+	if !bytes.Equal([]byte(result.stdout), want) {
+		t.Fatalf("stdout mismatch:\nwant: %s\n got: %s", want, result.stdout)
 	}
 
 	after := mustReadFile(t, path)
 	if !bytes.Equal(after, input) {
-		t.Fatalf("file should be unchanged")
+		t.Fatal(errFileUnchanged)
 	}
 }
 
+// TestRunFmtDiff verifies diff output is produced when requested.
 func TestRunFmtDiff(t *testing.T) {
 	t.Parallel()
 
-	if _, err := exec.LookPath(diffCommand); err != nil {
+	_, err := exec.LookPath(diffCommand)
+	if err != nil {
 		t.Skip("diff not available")
 	}
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "main.tf")
-	input := []byte("resource \"aws_instance\" \"b\" {\nami = \"ami-b\"\n}\n")
+	path := filepath.Join(dir, mainTF)
+	input := []byte(testInput)
 	mustWriteFile(t, path, input)
 
 	opts := defaultFmtOptions()
@@ -117,173 +163,211 @@ func TestRunFmtDiff(t *testing.T) {
 	opts.diff = true
 	opts.targets = []string{path}
 
-	stdout, stderr, code := runFmtForTest(t, opts, bytes.NewBuffer(nil))
-	if code != exitOK {
-		t.Fatalf("exit code: %d", code)
+	result := runFmtForTest(t, opts, bytes.NewBuffer(nil))
+	if result.code != exitOK {
+		t.Fatalf(exitCodeFormat, result.code)
 	}
-	if len(stderr) != 0 {
-		t.Fatalf("stderr not empty: %s", stderr)
+
+	if result.stderr != emptyString {
+		t.Fatalf(stderrNotEmptyFormat, result.stderr)
 	}
-	if !bytes.Contains([]byte(stdout), []byte("old/")) ||
-		!bytes.Contains([]byte(stdout), []byte("new/")) {
-		t.Fatalf("expected diff output to include old/new labels")
+
+	if !strings.Contains(result.stdout, "old/") ||
+		!strings.Contains(result.stdout, "new/") {
+		t.Fatal("expected diff output to include old/new labels")
 	}
 
 	after := mustReadFile(t, path)
 	if !bytes.Equal(after, input) {
-		t.Fatalf("file should be unchanged")
+		t.Fatal(errFileUnchanged)
 	}
 }
 
+// TestRunFmtCheck ensures -check reports differences and uses exit code 3.
 func TestRunFmtCheck(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "main.tf")
-	input := []byte("resource \"aws_instance\" \"b\" {\nami = \"ami-b\"\n}\n")
+	path := filepath.Join(dir, mainTF)
+	input := []byte(testInput)
 	mustWriteFile(t, path, input)
 
 	opts := defaultFmtOptions()
 	opts.check = true
 	opts.targets = []string{path}
 
-	stdout, stderr, code := runFmtForTest(t, opts, bytes.NewBuffer(nil))
-	if code != exitCheckDiff {
-		t.Fatalf("exit code: %d", code)
+	result := runFmtForTest(t, opts, bytes.NewBuffer(nil))
+	if result.code != exitCheckDiff {
+		t.Fatalf(exitCodeFormat, result.code)
 	}
-	if len(stderr) != 0 {
-		t.Fatalf("stderr not empty: %s", stderr)
+
+	if result.stderr != emptyString {
+		t.Fatalf(stderrNotEmptyFormat, result.stderr)
 	}
-	if !bytes.Contains([]byte(stdout), []byte(path)) {
+
+	if !strings.Contains(result.stdout, path) {
 		t.Fatalf("expected list output to include %s", path)
 	}
 
 	after := mustReadFile(t, path)
 	if !bytes.Equal(after, input) {
-		t.Fatalf("file should be unchanged")
+		t.Fatal(errFileUnchanged)
 	}
 }
 
+// TestRunFmtCheckClean verifies -check exits clean when already formatted.
 func TestRunFmtCheckClean(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "main.tf")
-	formatted := mustFormat(t, []byte("resource \"aws_instance\" \"b\" {\nami = \"ami-b\"\n}\n"))
+	path := filepath.Join(dir, mainTF)
+	formatted := mustFormat(t, []byte(testInput))
 	mustWriteFile(t, path, formatted)
 
 	opts := defaultFmtOptions()
 	opts.check = true
 	opts.targets = []string{path}
 
-	stdout, stderr, code := runFmtForTest(t, opts, bytes.NewBuffer(nil))
-	if code != exitOK {
-		t.Fatalf("exit code: %d", code)
+	result := runFmtForTest(t, opts, bytes.NewBuffer(nil))
+	if result.code != exitOK {
+		t.Fatalf(exitCodeFormat, result.code)
 	}
-	if len(stderr) != 0 {
-		t.Fatalf("stderr not empty: %s", stderr)
+
+	if result.stderr != emptyString {
+		t.Fatalf(stderrNotEmptyFormat, result.stderr)
 	}
-	if len(stdout) != 0 {
-		t.Fatalf("stdout should be empty")
+
+	if result.stdout != emptyString {
+		t.Fatal("stdout should be empty")
 	}
 }
 
+// TestRunFmtRecursive ensures recursive is opt-in for subdirectories.
 func TestRunFmtRecursive(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	rootPath := filepath.Join(dir, "main.tf")
-	subDir := filepath.Join(dir, "sub")
-	subPath := filepath.Join(subDir, "child.tf")
-	input := []byte("resource \"aws_instance\" \"b\" {\nami = \"ami-b\"\n}\n")
-	mustWriteFile(t, rootPath, input)
-	mustMkdirAll(t, subDir)
-	mustWriteFile(t, subPath, input)
-
-	opts := defaultFmtOptions()
-	opts.targets = []string{dir}
-	opts.recursive = false
-
-	_, _, code := runFmtForTest(t, opts, bytes.NewBuffer(nil))
-	if code != exitOK {
-		t.Fatalf("exit code: %d", code)
-	}
-
-	rootFormatted := mustFormat(t, input)
-	rootAfter := mustReadFile(t, rootPath)
-	if !bytes.Equal(rootAfter, rootFormatted) {
-		t.Fatalf("root file should be formatted")
-	}
-
-	subAfter := mustReadFile(t, subPath)
-	if !bytes.Equal(subAfter, input) {
-		t.Fatalf("subdir file should be unchanged")
-	}
+	verifyRecursiveFormatting(t, recursiveCase{
+		recursive:   false,
+		expectChild: expectChildUnchanged,
+	})
 }
 
+// TestRunFmtRecursiveEnabled verifies -recursive formats subdirectories too.
 func TestRunFmtRecursiveEnabled(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	rootPath := filepath.Join(dir, "main.tf")
-	subDir := filepath.Join(dir, "sub")
-	subPath := filepath.Join(subDir, "child.tf")
-	input := []byte("resource \"aws_instance\" \"b\" {\nami = \"ami-b\"\n}\n")
-	mustWriteFile(t, rootPath, input)
-	mustMkdirAll(t, subDir)
-	mustWriteFile(t, subPath, input)
-
-	opts := defaultFmtOptions()
-	opts.targets = []string{dir}
-	opts.recursive = true
-
-	_, _, code := runFmtForTest(t, opts, bytes.NewBuffer(nil))
-	if code != exitOK {
-		t.Fatalf("exit code: %d", code)
-	}
-
-	want := mustFormat(t, input)
-	rootAfter := mustReadFile(t, rootPath)
-	if !bytes.Equal(rootAfter, want) {
-		t.Fatalf("root file should be formatted")
-	}
-	childAfter := mustReadFile(t, subPath)
-	if !bytes.Equal(childAfter, want) {
-		t.Fatalf("child file should be formatted")
-	}
+	verifyRecursiveFormatting(t, recursiveCase{
+		recursive:   true,
+		expectChild: expectChildFormatted,
+	})
 }
 
+// TestRunFmtStdin ensures stdin formatting works without writing files.
 func TestRunFmtStdin(t *testing.T) {
 	t.Parallel()
 
-	input := []byte("resource \"aws_instance\" \"b\" {\nami = \"ami-b\"\n}\n")
+	input := []byte(testInput)
 	opts := defaultFmtOptions()
 	opts.targets = []string{stdinArg}
 
-	stdout, stderr, code := runFmtForTest(t, opts, bytes.NewBuffer(input))
-	if code != exitOK {
-		t.Fatalf("exit code: %d", code)
+	result := runFmtForTest(t, opts, bytes.NewBuffer(input))
+	if result.code != exitOK {
+		t.Fatalf(exitCodeFormat, result.code)
 	}
-	if len(stderr) != 0 {
-		t.Fatalf("stderr not empty: %s", stderr)
+
+	if result.stderr != emptyString {
+		t.Fatalf(stderrNotEmptyFormat, result.stderr)
 	}
 
 	want := mustFormat(t, input)
-	if !bytes.Equal([]byte(stdout), want) {
-		t.Fatalf("stdout mismatch:\nwant: %s\n got: %s", want, stdout)
+	if !bytes.Equal([]byte(result.stdout), want) {
+		t.Fatalf("stdout mismatch:\nwant: %s\n got: %s", want, result.stdout)
 	}
 }
 
-func runFmtForTest(t *testing.T, opts fmtOptions, in *bytes.Buffer) (string, string, int) {
+func verifyRecursiveFormatting(t *testing.T, testCase recursiveCase) {
+	t.Helper()
+
+	fixture := newRecursiveFixture(t)
+
+	opts := defaultFmtOptions()
+	opts.targets = []string{fixture.dir}
+	opts.recursive = testCase.recursive
+
+	result := runFmtForTest(t, opts, bytes.NewBuffer(nil))
+	if result.code != exitOK {
+		t.Fatalf(exitCodeFormat, result.code)
+	}
+
+	want := mustFormat(t, fixture.input)
+
+	rootAfter := mustReadFile(t, fixture.rootPath)
+	if !bytes.Equal(rootAfter, want) {
+		t.Fatal(errRootFormatted)
+	}
+
+	childAfter := mustReadFile(t, fixture.childPath)
+	if testCase.expectChild == expectChildFormatted {
+		if !bytes.Equal(childAfter, want) {
+			t.Fatal(errChildFormatted)
+		}
+
+		return
+	}
+
+	if !bytes.Equal(childAfter, fixture.input) {
+		t.Fatal(errSubdirUnchanged)
+	}
+}
+
+type recursiveFixture struct {
+	dir       string
+	rootPath  string
+	childPath string
+	input     []byte
+}
+
+func newRecursiveFixture(t *testing.T) recursiveFixture {
+	t.Helper()
+
+	dir := t.TempDir()
+	rootPath := filepath.Join(dir, mainTF)
+	subDir := filepath.Join(dir, "sub")
+	childPath := filepath.Join(subDir, "child.tf")
+	input := []byte(testInput)
+
+	mustWriteFile(t, rootPath, input)
+	mustMkdirAll(t, subDir)
+	mustWriteFile(t, childPath, input)
+
+	return recursiveFixture{
+		dir:       dir,
+		rootPath:  rootPath,
+		childPath: childPath,
+		input:     input,
+	}
+}
+
+func runFmtForTest(
+	t *testing.T,
+	opts fmtOptions,
+	input *bytes.Buffer,
+) fmtResult {
 	t.Helper()
 
 	var stdout bytes.Buffer
+
 	var stderr bytes.Buffer
-	ioCfg := ioConfig{in: in, out: &stdout, err: &stderr}
+
+	ioCfg := ioConfig{in: input, out: &stdout, err: &stderr}
 
 	code := runFmt(config.Default(), opts, ioCfg)
 
-	return stdout.String(), stderr.String(), code
+	return fmtResult{
+		stdout: stdout.String(),
+		stderr: stderr.String(),
+		code:   code,
+	}
 }
 
 func mustWriteFile(t *testing.T, path string, data []byte) {
@@ -298,6 +382,7 @@ func mustWriteFile(t *testing.T, path string, data []byte) {
 func mustReadFile(t *testing.T, path string) []byte {
 	t.Helper()
 
+	//nolint:gosec // test helper reads temporary files.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read file: %v", err)
@@ -320,7 +405,7 @@ func mustFormat(t *testing.T, src []byte) []byte {
 func mustMkdirAll(t *testing.T, path string) {
 	t.Helper()
 
-	err := os.MkdirAll(path, 0o755)
+	err := os.MkdirAll(path, permDir)
 	if err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

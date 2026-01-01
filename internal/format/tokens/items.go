@@ -1,3 +1,4 @@
+// Package tokens provides helpers for token span matching.
 package tokens
 
 import (
@@ -5,11 +6,13 @@ import (
 	"github.com/mreimbold/terraformat/internal/format/model"
 )
 
+// Span describes a contiguous token span.
 type Span struct {
 	Start int
 	End   int
 }
 
+// FindSpan locates the token span for an item sequence.
 func FindSpan(
 	allTokens hclwrite.Tokens,
 	itemTokens hclwrite.Tokens,
@@ -43,7 +46,8 @@ func tokensMatchAt(
 		return false
 	}
 
-	for itemIndex := model.IndexOffset; itemIndex < len(itemTokens); itemIndex++ {
+	itemLen := len(itemTokens)
+	for itemIndex := model.IndexOffset; itemIndex < itemLen; itemIndex++ {
 		if allTokens[startIndex+itemIndex] != itemTokens[itemIndex] {
 			return false
 		}

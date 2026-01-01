@@ -1,3 +1,4 @@
+// Package format implements the terraformat formatting pipeline.
 package format
 
 import (
@@ -120,7 +121,8 @@ func shouldApplyOrdering(cfg config.Config, ctx model.Context) bool {
 func collectBodyItems(body *hclwrite.Body) (model.Items, error) {
 	attrItems := collectAttributeItems(body.Attributes())
 	blockItems := collectBlockItems(body.Blocks())
-	items := make([]model.Item, model.IndexFirst, len(attrItems)+len(blockItems))
+	capacity := len(attrItems) + len(blockItems)
+	items := make([]model.Item, model.IndexFirst, capacity)
 	items = append(items, attrItems...)
 	items = append(items, blockItems...)
 
@@ -274,7 +276,7 @@ func newItem(
 	block *hclwrite.Block,
 	name string,
 	labelKey string,
-	tokens hclwrite.Tokens,
+	itemTokens hclwrite.Tokens,
 ) model.Item {
 	return model.Item{
 		Kind:      kind,
@@ -282,7 +284,7 @@ func newItem(
 		Block:     block,
 		Name:      name,
 		LabelKey:  labelKey,
-		Tokens:    tokens,
+		Tokens:    itemTokens,
 		Prefix:    nil,
 		OrigIndex: model.IndexFirst,
 		Start:     model.IndexFirst,
