@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mreimbold/terraformat/config"
-	"github.com/mreimbold/terraformat/format"
+	"github.com/mreimbold/terraformat/internal/config"
+	"github.com/mreimbold/terraformat/internal/format"
 )
 
 func TestRewriteSingleDashArgs(t *testing.T) {

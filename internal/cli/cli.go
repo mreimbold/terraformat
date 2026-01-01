@@ -15,8 +15,8 @@ import (
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/cobra"
 
-	"github.com/mreimbold/terraformat/config"
-	"github.com/mreimbold/terraformat/format"
+	"github.com/mreimbold/terraformat/internal/config"
+	"github.com/mreimbold/terraformat/internal/format"
 )
 
 const (
