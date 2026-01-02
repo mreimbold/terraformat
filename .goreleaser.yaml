@@ -59,3 +59,18 @@ changelog:
 
 release:
   prerelease: auto
+
+brews:
+  - name: terraformat
+    repository:
+      owner: mreimbold
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/mreimbold/terraformat
+    description: Standalone Terraform/OpenTofu formatter that goes beyond terraform fmt and tofu fmt
+    license: MIT
+    install: |
+      bin.install "terraformat"
+    test: |
+      system "#{bin}/terraformat", "--version"
